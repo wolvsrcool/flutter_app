@@ -111,7 +111,7 @@ class _MyHomePageState extends State<MyHomePage> {
                         style: TextStyle(color: fg),
                         cursorColor: fg,
                         decoration: InputDecoration(
-                          hintText: 'пім-пум-пум',
+                          hintText: 'пім-пум-пім',
                           hintStyle: TextStyle(color: fg.withOpacity(0.6)),
                           prefixIcon: Icon(Icons.auto_awesome, color: fg),
                           filled: true,
