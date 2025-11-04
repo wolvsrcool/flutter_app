@@ -1,7 +1,10 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:my_project/models/user_model.dart';
+import 'package:my_project/services/connectivity_service.dart';
 import 'package:my_project/services/local_storage_service.dart';
+import 'package:my_project/services/mqtt_service.dart';
 import 'package:my_project/utils/validators.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -24,12 +27,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
     scheduleBox: Hive.box('scheduleBox'),
   );
 
+  late final dynamic _mqttService;
+  final ConnectivityService _connectivityService = ConnectivityService();
+
   bool _isEditingName = false;
   bool _isEditingGroup = false;
   final _nameFormKey = GlobalKey<FormState>();
   final _groupFormKey = GlobalKey<FormState>();
   final _fullNameController = TextEditingController();
   final _groupController = TextEditingController();
+
+  double _currentTemperature = 0;
+  bool _isConnectedToMQTT = false;
+  String _statusMessage = 'Ініціалізація...';
 
   UserModel _currentUserData = UserModel(
     id: '',
@@ -45,6 +55,73 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _currentUserData = widget.currentUser;
     _fullNameController.text = _currentUserData.fullName;
     _groupController.text = _currentUserData.group;
+
+    _mqttService = MQTTService();
+
+    _initMQTT();
+    _initConnectivity();
+  }
+
+  void _initMQTT() async {
+    final hasConnection = await _connectivityService.hasInternetConnection();
+
+    if (mounted) {
+      setState(() {
+        _statusMessage = hasConnection
+            ? 'Підключення...'
+            : 'Немає мережевого з\'єднання';
+      });
+    }
+
+    if (hasConnection) {
+      await _mqttService.connectAndListen();
+    }
+
+    _mqttService.temperatureStream.listen((dynamic temperatureData) {
+      if (!mounted) return;
+
+      final double temperature = temperatureData is double
+          ? temperatureData
+          : double.tryParse(temperatureData.toString()) ?? 0.0;
+
+      setState(() {
+        _currentTemperature = temperature;
+      });
+    });
+
+    _mqttService.connectionStatusStream.listen((bool isConnected) {
+      if (!mounted) return;
+
+      setState(() {
+        _isConnectedToMQTT = isConnected;
+      });
+    });
+
+    _mqttService.statusMessageStream.listen((String message) {
+      if (!mounted) return;
+
+      setState(() {
+        _statusMessage = message;
+      });
+    });
+  }
+
+  void _initConnectivity() {
+    if (kIsWeb) return;
+
+    _connectivityService.connectionStream.listen((hasConnection) {
+      if (!mounted) return;
+
+      final bool connectionStatus = hasConnection;
+
+      if (connectionStatus && !_isConnectedToMQTT) {
+        _mqttService.connectAndListen();
+      } else if (!connectionStatus) {
+        setState(() {
+          _statusMessage = 'Немає мережевого з\'єднання';
+        });
+      }
+    });
   }
 
   String _getInitials(String fullName) {
@@ -95,7 +172,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       try {
         await _storageService.saveUser(updatedUser);
-
         await _storageService.registerUser(updatedUser);
 
         setState(() {
@@ -137,7 +213,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       try {
         await _storageService.saveUser(updatedUser);
-
         await _storageService.registerUser(updatedUser);
 
         setState(() {
@@ -171,6 +246,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void dispose() {
     _fullNameController.dispose();
     _groupController.dispose();
+    _mqttService.dispose();
+    if (!kIsWeb) {
+      _connectivityService.dispose();
+    }
     super.dispose();
   }
 
@@ -179,62 +258,143 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final screenWidth = MediaQuery.of(context).size.width;
     final contentWidth = screenWidth > 600 ? 400.0 : screenWidth * 0.8;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: Center(
-        child: SizedBox(
-          width: contentWidth,
-          child: Column(
-            children: [
-              CircleAvatar(
-                radius: 50,
-                backgroundColor: Colors.blue,
-                child: Text(
-                  _getInitials(_currentUserData.fullName),
-                  style: const TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
+    return Scaffold(
+      body: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Center(
+                child: SizedBox(
+                  width: contentWidth,
+                  child: Column(
+                    children: [
+                      CircleAvatar(
+                        radius: 50,
+                        backgroundColor: Colors.blue,
+                        child: Text(
+                          _getInitials(_currentUserData.fullName),
+                          style: const TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      Text(
+                        _currentUserData.email,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          color: Colors.grey,
+                        ),
+                      ),
+                      const SizedBox(height: 32),
+
+                      _buildEditableField(
+                        title: 'Повне ім\'я',
+                        value: _currentUserData.fullName,
+                        isEditing: _isEditingName,
+                        controller: _fullNameController,
+                        formKey: _nameFormKey,
+                        validator: Validators.validateFullName,
+                        onEdit: _startEditingName,
+                        onCancel: _cancelEditingName,
+                        onSave: _saveName,
+                        icon: Icons.person_outline,
+                      ),
+                      const SizedBox(height: 16),
+
+                      _buildEditableField(
+                        title: 'Група',
+                        value: _currentUserData.group,
+                        isEditing: _isEditingGroup,
+                        controller: _groupController,
+                        formKey: _groupFormKey,
+                        validator: Validators.validateGroup,
+                        onEdit: _startEditingGroup,
+                        onCancel: _cancelEditingGroup,
+                        onSave: _saveGroup,
+                        icon: Icons.school_outlined,
+                      ),
+
+                      if (!kIsWeb) const SizedBox(height: 48),
+                      if (!kIsWeb) _buildWeatherCard(),
+                    ],
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-              Text(
-                _currentUserData.email,
-                style: const TextStyle(fontSize: 16, color: Colors.grey),
-              ),
-              const SizedBox(height: 32),
-
-              _buildEditableField(
-                title: 'Повне ім\'я',
-                value: _currentUserData.fullName,
-                isEditing: _isEditingName,
-                controller: _fullNameController,
-                formKey: _nameFormKey,
-                validator: Validators.validateFullName,
-                onEdit: _startEditingName,
-                onCancel: _cancelEditingName,
-                onSave: _saveName,
-                icon: Icons.person_outline,
-              ),
-              const SizedBox(height: 16),
-
-              _buildEditableField(
-                title: 'Група',
-                value: _currentUserData.group,
-                isEditing: _isEditingGroup,
-                controller: _groupController,
-                formKey: _groupFormKey,
-                validator: Validators.validateGroup,
-                onEdit: _startEditingGroup,
-                onCancel: _cancelEditingGroup,
-                onSave: _saveGroup,
-                icon: Icons.school_outlined,
+  Widget _buildWeatherCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.blue[50],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.blue[100]!),
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.location_on, color: Colors.blue[700], size: 20),
+              const SizedBox(width: 8),
+              const Text(
+                'Погода у Львові',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.blue,
+                ),
               ),
             ],
           ),
-        ),
+          const SizedBox(height: 12),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.thermostat, color: Colors.orange[600], size: 32),
+              const SizedBox(width: 12),
+              Text(
+                '${_currentTemperature.toStringAsFixed(1)}°C',
+                style: const TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blue,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                _isConnectedToMQTT ? Icons.cloud_done : Icons.cloud_off,
+                color: _isConnectedToMQTT ? Colors.green : Colors.red,
+                size: 16,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                _statusMessage,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: _isConnectedToMQTT ? Colors.green : Colors.grey[600],
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
