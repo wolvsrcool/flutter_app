@@ -10,10 +10,10 @@ class CustomButton extends StatelessWidget {
   const CustomButton({
     required this.text,
     required this.onPressed,
-    super.key,
     this.backgroundColor = Colors.blue,
     this.foregroundColor = Colors.white,
     this.width = double.infinity,
+    super.key,
   });
 
   @override
@@ -32,7 +32,11 @@ class CustomButton extends StatelessWidget {
         ),
         child: Text(
           text,
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+          ),
         ),
       ),
     );

@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:hive_flutter/hive_flutter.dart';
 import 'package:my_project/models/schedule_model.dart';
+import 'package:my_project/models/user_model.dart';
+import 'package:my_project/screens/login_screen.dart';
 import 'package:my_project/screens/profile_screen.dart';
 import 'package:my_project/widgets/navigation_bar.dart';
 import 'package:my_project/widgets/schedule_card.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final UserModel currentUser;
+
+  const HomeScreen({required this.currentUser, super.key});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -19,7 +24,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final Map<int, List<Schedule>> _weeklySchedules = {
     0: [
-      // Понеділок
       const Schedule(
         time: '08:30 - 10:05',
         subject: 'Математичний аналіз',
@@ -36,7 +40,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     ],
     1: [
-      // Вівторок
       const Schedule(
         time: '09:00 - 10:35',
         subject: 'Фізика',
@@ -53,7 +56,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     ],
     2: [
-      // Середа
       const Schedule(
         time: '08:30 - 10:05',
         subject: 'Програмування',
@@ -70,7 +72,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     ],
     3: [
-      // Четвер
       const Schedule(
         time: '10:25 - 12:00',
         subject: 'Фізика',
@@ -80,7 +81,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     ],
     4: [
-      // П'ятниця
       const Schedule(
         time: '09:00 - 10:35',
         subject: 'Іноземна мова',
@@ -98,16 +98,149 @@ class _HomeScreenState extends State<HomeScreen> {
     ],
   };
 
+  void _showLogoutDialog(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => Dialog(
+        insetPadding: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 290),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.logout, size: 48, color: Colors.red),
+                const SizedBox(height: 16),
+                const Text(
+                  'Вихід',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Ви впевнені, що хочете вийти?',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 16, color: Colors.grey),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    IntrinsicWidth(
+                      child: SizedBox(
+                        height: 44,
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          style: OutlinedButton.styleFrom(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            side: const BorderSide(color: Colors.grey),
+                          ),
+                          child: const Text(
+                            'Скасувати',
+                            style: TextStyle(
+                              color: Colors.grey,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    IntrinsicWidth(
+                      child: SizedBox(
+                        height: 44,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            Navigator.of(context).pop();
+                            _logout(context);
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          child: const Text(
+                            'Вийти',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _logout(BuildContext context) {
+    Hive.box<dynamic>('userBox').delete('current_user');
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute<void>(builder: (context) => const LoginScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Розклад | НУЛП'),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Розклад | НУЛП'),
+            Text(
+              'Група: ${widget.currentUser.group}',
+              style: const TextStyle(fontSize: 12, color: Colors.white70),
+            ),
+          ],
+        ),
         actions: [
-          IconButton(icon: const Icon(Icons.calendar_today), onPressed: () {}),
+          if (_currentIndex == 1)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: SizedBox(
+                height: 36,
+                child: ElevatedButton(
+                  onPressed: () => _showLogoutDialog(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.red,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                  ),
+                  child: const Text(
+                    'Вийти',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
-      body: _currentIndex == 0 ? _buildHomeContent() : const ProfileScreen(),
+      body: _currentIndex == 0
+          ? _buildHomeContent()
+          : ProfileScreen(
+              currentUser: widget.currentUser,
+              onProfileUpdated: () => setState(() {}),
+            ),
       bottomNavigationBar: CustomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) {
@@ -120,9 +253,10 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildHomeContent() {
+    final daySchedules = _weeklySchedules[_selectedDayIndex] ?? [];
+
     return Column(
       children: [
-        // Flex Tab Bar for days of week
         Container(
           height: 60,
           padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -175,7 +309,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         const SizedBox(height: 8),
-        // Selected day title
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
@@ -196,20 +329,17 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         const SizedBox(height: 16),
-        // Schedule list for selected day
         Expanded(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: _buildDaySchedule(_selectedDayIndex),
+            child: _buildDaySchedule(daySchedules),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildDaySchedule(int dayIndex) {
-    final daySchedules = _weeklySchedules[dayIndex] ?? [];
-
+  Widget _buildDaySchedule(List<Schedule> daySchedules) {
     if (daySchedules.isEmpty) {
       return const Center(
         child: Text(
