@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class ConnectivityService {
   final Connectivity _connectivity = Connectivity();
@@ -13,8 +14,12 @@ class ConnectivityService {
   }
 
   Future<void> _init() async {
-    await _checkConnection();
+    if (kIsWeb) {
+      _connectionController.add(true);
+      return;
+    }
 
+    await _checkConnection();
     _connectivity.onConnectivityChanged.listen((result) {
       _checkConnection();
     });
@@ -22,25 +27,35 @@ class ConnectivityService {
 
   Future<void> _checkConnection() async {
     try {
+      if (kIsWeb) {
+        _connectionController.add(true);
+        return;
+      }
+
       final connectivityResult = await _connectivity.checkConnectivity();
       final hasConnection = connectivityResult != ConnectivityResult.none;
-
       _connectionController.add(hasConnection);
     } catch (e) {
-      _connectionController.add(false);
+      _connectionController.add(kIsWeb);
     }
   }
 
   Future<bool> hasInternetConnection() async {
     try {
+      if (kIsWeb) {
+        return true;
+      }
+
       final connectivityResult = await _connectivity.checkConnectivity();
       return connectivityResult != ConnectivityResult.none;
     } catch (e) {
-      return false;
+      return kIsWeb;
     }
   }
 
   void dispose() {
-    _connectionController.close();
+    if (!_connectionController.isClosed) {
+      _connectionController.close();
+    }
   }
 }

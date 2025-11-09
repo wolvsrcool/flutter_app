@@ -3,12 +3,15 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:my_project/screens/home_screen.dart';
 import 'package:my_project/screens/register_screen.dart';
 import 'package:my_project/services/local_storage_service.dart';
+import 'package:my_project/services/schedule_repository.dart';
 import 'package:my_project/utils/validators.dart';
 import 'package:my_project/widgets/custom_button.dart';
 import 'package:my_project/widgets/custom_text_field.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+  final ScheduleRepository scheduleRepository;
+
+  const LoginScreen({required this.scheduleRepository, super.key});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -65,7 +68,10 @@ class _LoginScreenState extends State<LoginScreen> {
             Navigator.pushReplacement(
               context,
               MaterialPageRoute<void>(
-                builder: (context) => HomeScreen(currentUser: user),
+                builder: (context) => HomeScreen(
+                  currentUser: user,
+                  scheduleRepository: widget.scheduleRepository,
+                ),
               ),
             );
           }
@@ -172,8 +178,10 @@ class _LoginScreenState extends State<LoginScreen> {
                                     Navigator.push(
                                       context,
                                       MaterialPageRoute<void>(
-                                        builder: (context) =>
-                                            const RegisterScreen(),
+                                        builder: (context) => RegisterScreen(
+                                          scheduleRepository:
+                                              widget.scheduleRepository,
+                                        ),
                                       ),
                                     );
                                   },

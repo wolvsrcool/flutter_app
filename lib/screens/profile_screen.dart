@@ -6,13 +6,16 @@ import 'package:my_project/services/connectivity_service.dart';
 import 'package:my_project/services/local_storage_service.dart';
 import 'package:my_project/services/mqtt_service.dart';
 import 'package:my_project/utils/validators.dart';
+import 'package:my_project/utils/week_calculator.dart';
 
 class ProfileScreen extends StatefulWidget {
   final UserModel currentUser;
-  final VoidCallback onProfileUpdated;
+  final bool isWeekReversed;
+  final void Function(UserModel, bool) onProfileUpdated;
 
   const ProfileScreen({
     required this.currentUser,
+    required this.isWeekReversed,
     required this.onProfileUpdated,
     super.key,
   });
@@ -27,7 +30,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     scheduleBox: Hive.box('scheduleBox'),
   );
 
-  late final dynamic _mqttService;
+  late final MQTTService _mqttService;
   final ConnectivityService _connectivityService = ConnectivityService();
 
   bool _isEditingName = false;
@@ -41,7 +44,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isConnectedToMQTT = false;
   String _statusMessage = 'Ініціалізація...';
 
-  UserModel _currentUserData = UserModel(
+  UserModel _currentUserData = const UserModel(
     id: '',
     email: '',
     fullName: '',
@@ -49,10 +52,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     password: '',
   );
 
+  bool _isWeekReversed = false;
+
   @override
   void initState() {
     super.initState();
     _currentUserData = widget.currentUser;
+    _isWeekReversed = widget.isWeekReversed;
     _fullNameController.text = _currentUserData.fullName;
     _groupController.text = _currentUserData.group;
 
@@ -162,82 +168,76 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   void _saveName() async {
     if (_nameFormKey.currentState!.validate()) {
-      final updatedUser = UserModel(
-        id: _currentUserData.id,
-        email: _currentUserData.email,
+      final updatedUser = _currentUserData.copyWith(
         fullName: _fullNameController.text.trim(),
-        group: _currentUserData.group,
-        password: _currentUserData.password,
       );
 
-      try {
-        await _storageService.saveUser(updatedUser);
-        await _storageService.registerUser(updatedUser);
-
-        setState(() {
-          _isEditingName = false;
-          _currentUserData = updatedUser;
-        });
-        widget.onProfileUpdated();
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Ім\'я оновлено успішно!'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Помилка оновлення: $e'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      }
+      await _saveUserChanges(updatedUser);
     }
   }
 
   void _saveGroup() async {
     if (_groupFormKey.currentState!.validate()) {
-      final updatedUser = UserModel(
-        id: _currentUserData.id,
-        email: _currentUserData.email,
-        fullName: _currentUserData.fullName,
+      final updatedUser = _currentUserData.copyWith(
         group: _groupController.text.trim().toUpperCase(),
-        password: _currentUserData.password,
       );
 
-      try {
-        await _storageService.saveUser(updatedUser);
-        await _storageService.registerUser(updatedUser);
+      await _saveUserChanges(updatedUser);
+    }
+  }
 
-        setState(() {
-          _isEditingGroup = false;
-          _currentUserData = updatedUser;
-        });
-        widget.onProfileUpdated();
+  void _updateSubgroup(String newSubgroup) async {
+    final updatedUser = _currentUserData.copyWith(subgroup: newSubgroup);
+    await _saveUserChanges(updatedUser);
+  }
 
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Групу оновлено успішно!'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Помилка оновлення: $e'),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
+  void _toggleWeekType() async {
+    final newIsReversed = !_isWeekReversed;
+
+    final newWeekType = WeekCalculator.calculateWeekType(
+      isReversed: newIsReversed,
+    );
+    final updatedUser = _currentUserData.copyWith(weekType: newWeekType);
+
+    final userBox = Hive.box<dynamic>('userBox');
+    await userBox.put('isWeekReversed', newIsReversed);
+
+    setState(() {
+      _isWeekReversed = newIsReversed;
+    });
+
+    await _saveUserChanges(updatedUser);
+  }
+
+  Future<void> _saveUserChanges(UserModel updatedUser) async {
+    try {
+      await _storageService.saveUser(updatedUser);
+      await _storageService.updateRegisteredUser(updatedUser);
+
+      setState(() {
+        _isEditingName = false;
+        _isEditingGroup = false;
+        _currentUserData = updatedUser;
+      });
+
+      widget.onProfileUpdated(updatedUser, _isWeekReversed);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Зміни збережено успішно!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Помилка збереження: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }
@@ -257,6 +257,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
     final contentWidth = screenWidth > 600 ? 400.0 : screenWidth * 0.8;
+    final isMobile = MediaQuery.of(context).size.width < 600;
 
     return Scaffold(
       body: Column(
@@ -282,7 +283,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
-
                       Text(
                         _currentUserData.email,
                         style: const TextStyle(
@@ -291,7 +291,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                       ),
                       const SizedBox(height: 32),
-
                       _buildEditableField(
                         title: 'Повне ім\'я',
                         value: _currentUserData.fullName,
@@ -305,27 +304,262 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         icon: Icons.person_outline,
                       ),
                       const SizedBox(height: 16),
-
-                      _buildEditableField(
-                        title: 'Група',
-                        value: _currentUserData.group,
-                        isEditing: _isEditingGroup,
-                        controller: _groupController,
-                        formKey: _groupFormKey,
-                        validator: Validators.validateGroup,
-                        onEdit: _startEditingGroup,
-                        onCancel: _cancelEditingGroup,
-                        onSave: _saveGroup,
-                        icon: Icons.school_outlined,
-                      ),
-
-                      if (!kIsWeb) const SizedBox(height: 48),
-                      if (!kIsWeb) _buildWeatherCard(),
+                      _buildGroupAndSubgroupField(),
+                      const SizedBox(height: 16),
+                      _buildWeekTypeSetting(),
+                      if (isMobile) ...[
+                        const SizedBox(height: 32),
+                        _buildWeatherCard(),
+                      ],
                     ],
                   ),
                 ),
               ),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGroupAndSubgroupField() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.school_outlined, color: Colors.blue, size: 24),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Група',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    if (_isEditingGroup)
+                      _buildGroupEditField()
+                    else
+                      Text(
+                        _currentUserData.group,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              if (!_isEditingGroup)
+                IconButton(
+                  icon: const Icon(Icons.edit, size: 20),
+                  onPressed: _startEditingGroup,
+                  tooltip: 'Редагувати групу',
+                  color: Colors.blue,
+                ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              const Icon(Icons.group, color: Colors.blue, size: 24),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Підгрупа',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.grey[300]!),
+                        borderRadius: BorderRadius.circular(8),
+                        color: Colors.white,
+                      ),
+                      child: DropdownButton<String>(
+                        value: _currentUserData.subgroup,
+                        underline: const SizedBox(),
+                        isExpanded: true,
+                        items: [
+                          const DropdownMenuItem(
+                            value: '1',
+                            child: Text(
+                              'Перша підгрупа',
+                              style: TextStyle(fontSize: 16),
+                            ),
+                          ),
+                          const DropdownMenuItem(
+                            value: '2',
+                            child: Text(
+                              'Друга підгрупа',
+                              style: TextStyle(fontSize: 16),
+                            ),
+                          ),
+                        ],
+                        onChanged: (String? newValue) {
+                          if (newValue != null) {
+                            _updateSubgroup(newValue);
+                          }
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGroupEditField() {
+    return Form(
+      key: _groupFormKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextFormField(
+            controller: _groupController,
+            decoration: InputDecoration(
+              hintText: 'Введіть групу',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 12,
+              ),
+            ),
+            validator: Validators.validateGroup,
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 40,
+                  child: ElevatedButton(
+                    onPressed: _cancelEditingGroup,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.grey,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: const Text(
+                      'Скасувати',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: SizedBox(
+                  height: 40,
+                  child: ElevatedButton(
+                    onPressed: _saveGroup,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: const Text(
+                      'Зберегти',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWeekTypeSetting() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey[50],
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey[200]!),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Порядок чергування тижнів',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              const Icon(Icons.swap_horiz, color: Colors.blue, size: 24),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _isWeekReversed
+                          ? 'Зворотний порядок'
+                          : 'Звичайний порядок',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    Text(
+                      _isWeekReversed
+                          ? 'Чисельник → Знаменник'
+                          : 'Знаменник → Чисельник',
+                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+              ),
+              Switch(
+                value: _isWeekReversed,
+                onChanged: (bool value) => _toggleWeekType(),
+                activeThumbColor: Colors.blue,
+              ),
+            ],
           ),
         ],
       ),

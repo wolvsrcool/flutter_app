@@ -3,13 +3,16 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:my_project/models/user_model.dart';
 import 'package:my_project/screens/home_screen.dart';
 import 'package:my_project/services/local_storage_service.dart';
+import 'package:my_project/services/schedule_repository.dart';
 import 'package:my_project/utils/validators.dart';
 import 'package:my_project/widgets/custom_button.dart';
 import 'package:my_project/widgets/custom_text_field.dart';
 import 'package:uuid/uuid.dart';
 
 class RegisterScreen extends StatefulWidget {
-  const RegisterScreen({super.key});
+  final ScheduleRepository scheduleRepository;
+
+  const RegisterScreen({required this.scheduleRepository, super.key});
 
   @override
   State<RegisterScreen> createState() => _RegisterScreenState();
@@ -86,7 +89,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
           Navigator.pushAndRemoveUntil(
             context,
             MaterialPageRoute<void>(
-              builder: (context) => HomeScreen(currentUser: newUser),
+              builder: (context) => HomeScreen(
+                currentUser: newUser,
+                scheduleRepository: widget.scheduleRepository,
+              ),
             ),
             (route) => false,
           );
@@ -169,7 +175,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         const SizedBox(height: 16),
                         CustomTextField(
                           controller: _groupController,
-                          hintText: 'Група (наприклад: КН-101)',
+                          hintText: 'Група (наприклад: КБ-101)',
                           prefixIcon: Icons.school,
                           validator: Validators.validateGroup,
                           width: contentWidth,

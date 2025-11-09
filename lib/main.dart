@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:http/http.dart' as http;
 import 'package:my_project/models/user_model.dart';
 import 'package:my_project/screens/home_screen.dart';
 import 'package:my_project/screens/login_screen.dart';
+import 'package:my_project/services/api_service.dart';
 import 'package:my_project/services/local_storage_service.dart';
+import 'package:my_project/services/schedule_repository.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -42,12 +45,23 @@ class _AuthWrapperState extends State<AuthWrapper> {
     scheduleBox: Hive.box('scheduleBox'),
   );
 
+  late final ScheduleRepository _scheduleRepository;
+
   UserModel? _currentUser;
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
+    _initializeServices();
+  }
+
+  void _initializeServices() {
+    final apiService = LpnuApiService(client: http.Client());
+    _scheduleRepository = ScheduleRepository(
+      apiService: apiService,
+      localStorageService: _storageService,
+    );
     _checkAuthStatus();
   }
 
@@ -77,7 +91,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
     }
 
     return _currentUser != null
-        ? HomeScreen(currentUser: _currentUser!)
-        : const LoginScreen();
+        ? HomeScreen(
+            currentUser: _currentUser!,
+            scheduleRepository: _scheduleRepository,
+          )
+        : LoginScreen(scheduleRepository: _scheduleRepository);
   }
 }

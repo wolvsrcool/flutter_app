@@ -11,6 +11,7 @@ abstract class LocalStorageService {
   Future<bool> checkUserExists(String email);
   Future<void> registerUser(UserModel user);
   Future<UserModel?> findUserByEmail(String email);
+  Future<void> updateRegisteredUser(UserModel user);
 }
 
 class HiveStorageService implements LocalStorageService {
@@ -28,21 +29,15 @@ class HiveStorageService implements LocalStorageService {
   Future<UserModel?> getCurrentUser() async {
     try {
       final userData = userBox.get('current_user');
-
-      if (userData == null) {
-        return null;
-      }
-
+      if (userData == null) return null;
       final Map<dynamic, dynamic> userMap = userData as Map<dynamic, dynamic>;
-      final user = UserModel(
+      return UserModel(
         id: userMap['id']?.toString() ?? '',
         email: userMap['email']?.toString() ?? '',
         fullName: userMap['fullName']?.toString() ?? '',
         group: userMap['group']?.toString() ?? '',
         password: userMap['password']?.toString() ?? '',
       );
-
-      return user;
     } catch (e) {
       return null;
     }
@@ -62,6 +57,13 @@ class HiveStorageService implements LocalStorageService {
   }
 
   @override
+  Future<void> updateRegisteredUser(UserModel user) async {
+    final Map<dynamic, dynamic> users = await _getAllUsers();
+    users[user.email] = user.toJson();
+    await userBox.put('registered_users', users);
+  }
+
+  @override
   Future<void> registerUser(UserModel user) async {
     final Map<dynamic, dynamic> users = await _getAllUsers();
     users[user.email] = user.toJson();
@@ -72,7 +74,6 @@ class HiveStorageService implements LocalStorageService {
   Future<UserModel?> findUserByEmail(String email) async {
     final Map<dynamic, dynamic> users = await _getAllUsers();
     final dynamic userData = users[email];
-
     if (userData != null && userData is Map) {
       try {
         final Map<dynamic, dynamic> userMap = Map<dynamic, dynamic>.from(
@@ -111,7 +112,6 @@ class HiveStorageService implements LocalStorageService {
     try {
       final schedulesData = scheduleBox.get('schedules');
       if (schedulesData == null) return [];
-
       final List<dynamic> schedulesList = schedulesData as List<dynamic>;
       return schedulesList.map((item) {
         final Map<dynamic, dynamic> scheduleMap = item as Map<dynamic, dynamic>;
@@ -121,6 +121,9 @@ class HiveStorageService implements LocalStorageService {
           teacher: scheduleMap['teacher']?.toString() ?? '',
           classroom: scheduleMap['classroom']?.toString() ?? '',
           type: scheduleMap['type']?.toString() ?? '',
+          day: scheduleMap['day']?.toString() ?? '',
+          weekType: scheduleMap['weekType']?.toString() ?? 'full',
+          subgroup: scheduleMap['subgroup']?.toString() ?? '0',
         );
       }).toList();
     } catch (e) {

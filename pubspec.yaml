@@ -40,6 +40,8 @@ dependencies:
   uuid: ^4.2.1
   mqtt_client: ^10.11.1
   connectivity_plus: ^5.0.1
+  http: ^1.1.0
+  html: ^0.15.4
 
 dev_dependencies:
   flutter_test:

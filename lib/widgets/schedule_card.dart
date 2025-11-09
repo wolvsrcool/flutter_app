@@ -27,19 +27,56 @@ class ScheduleCard extends StatelessWidget {
                     fontSize: 16,
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _getTypeColor(schedule.type),
-                    borderRadius: BorderRadius.circular(5),
-                  ),
-                  child: Text(
-                    schedule.type,
-                    style: const TextStyle(color: Colors.white, fontSize: 12),
-                  ),
+                Row(
+                  children: [
+                    if (schedule.subgroup != '0')
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 3,
+                        ),
+                        margin: const EdgeInsets.only(right: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.purple,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.group,
+                              size: 10,
+                              color: Colors.white,
+                            ),
+                            const SizedBox(width: 2),
+                            Text(
+                              'Підгр. ${schedule.subgroup}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: _getTypeColor(schedule.type),
+                        borderRadius: BorderRadius.circular(5),
+                      ),
+                      child: Text(
+                        schedule.type,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -51,6 +88,26 @@ class ScheduleCard extends StatelessWidget {
             const SizedBox(height: 4),
             Text('Викладач: ${schedule.teacher}'),
             Text('Аудиторія: ${schedule.classroom}'),
+            if (schedule.weekType != 'full')
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, size: 14, color: Colors.grey[600]),
+                    const SizedBox(width: 4),
+                    Text(
+                      schedule.weekType == 'chys'
+                          ? 'Тільки по чисельнику'
+                          : 'Тільки по знаменнику',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey[600],
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
       ),
